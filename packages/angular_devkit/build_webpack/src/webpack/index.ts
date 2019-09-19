@@ -29,6 +29,15 @@ export type BuildResult = BuilderOutput & {
   emittedFiles?: EmittedFiles[];
 };
 
+export interface WebpackWatcherRef {
+  webpackWatcher: webpack.compiler.Watching | null;
+}
+
+export const webpackWatcherRef: WebpackWatcherRef = {
+  webpackWatcher: null
+}
+
+
 export function runWebpack(
   config: webpack.Configuration,
   context: BuilderContext,
@@ -46,6 +55,8 @@ export function runWebpack(
       new ArchitectPlugin(context),
     ],
   });
+
+  let watching: webpack.compiler.Watching;
 
   return createWebpack(config).pipe(
     switchMap(webpackCompiler => new Observable<BuildResult>(obs => {
@@ -70,7 +81,18 @@ export function runWebpack(
       try {
         if (config.watch) {
           const watchOptions = config.watchOptions || {};
-          const watching = webpackCompiler.watch(watchOptions, callback);
+          watching = webpackCompiler.watch(watchOptions, callback);
+
+          // HACK: Remember watcher for server builder
+          if (config.resolve 
+            && config.resolve.mainFields 
+            && !(config.resolve.mainFields as string[]).includes('browser')) {
+              webpackWatcherRef.webpackWatcher = watching;
+              console.debug('set');
+          }
+          else {
+            console.debug('do not set');
+          }
 
           // Teardown logic. Close the watcher when unsubscribed from.
           return () => watching.close(() => { });

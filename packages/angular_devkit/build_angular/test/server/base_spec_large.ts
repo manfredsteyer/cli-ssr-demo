@@ -134,7 +134,7 @@ describe('Server Builder', () => {
     await run.stop();
   });
 
-  it('runs watch mode', async () => {
+  fit('runs watch mode', async () => {
     const overrides = { watch: true };
 
     const run = await architect.scheduleTarget(target, overrides);
@@ -150,10 +150,16 @@ describe('Server Builder', () => {
         } else {
           expect(content).toMatch(/AppServerModule\.ngModuleDef/);
         }
+
+        host.writeMultipleFiles({
+          'src/app/app.component.css': `p { color: red; }`,
+        });
+
       }),
-      take(1),
+      take(2),
     ).toPromise();
 
+  
     await run.stop();
   });
 });
