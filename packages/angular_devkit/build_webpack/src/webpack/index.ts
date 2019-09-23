@@ -13,6 +13,7 @@ import * as webpack from 'webpack';
 import { ArchitectPlugin } from '../plugins/architect';
 import { EmittedFiles, getEmittedFiles } from '../utils';
 import { Schema as RealWebpackBuilderSchema } from './schema';
+import { WebpackCompiler } from 'license-webpack-plugin/dist/WebpackCompiler';
 
 const webpackMerge = require('webpack-merge');
 
@@ -29,14 +30,15 @@ export type BuildResult = BuilderOutput & {
   emittedFiles?: EmittedFiles[];
 };
 
-export interface WebpackWatcherRef {
-  webpackWatcher: webpack.compiler.Watching | null;
+// HACK to get Compiler out to the builder
+export interface WebpackCompilerRef {
+  webpackCompiler: webpack.Compiler | null;
 }
 
-export const webpackWatcherRef: WebpackWatcherRef = {
-  webpackWatcher: null
+// HACK to get Compiler out to the builder
+export const webpackCompilerRef: WebpackCompilerRef = {
+  webpackCompiler: null
 }
-
 
 export function runWebpack(
   config: webpack.Configuration,
@@ -65,6 +67,17 @@ export function runWebpack(
           return obs.error(err);
         }
 
+        // HACK: Remember compiler for server builder
+        if (config.resolve 
+          && config.resolve.mainFields 
+          && !(config.resolve.mainFields as string[]).includes('browser')) {
+            webpackCompilerRef.webpackCompiler = webpackCompiler;
+            console.debug('set');
+        }
+        else {
+          console.debug('do not set');
+        }
+
         // Log stats.
         log(stats, config);
 
@@ -82,17 +95,6 @@ export function runWebpack(
         if (config.watch) {
           const watchOptions = config.watchOptions || {};
           watching = webpackCompiler.watch(watchOptions, callback);
-
-          // HACK: Remember watcher for server builder
-          if (config.resolve 
-            && config.resolve.mainFields 
-            && !(config.resolve.mainFields as string[]).includes('browser')) {
-              webpackWatcherRef.webpackWatcher = watching;
-              console.debug('set');
-          }
-          else {
-            console.debug('do not set');
-          }
 
           // Teardown logic. Close the watcher when unsubscribed from.
           return () => watching.close(() => { });

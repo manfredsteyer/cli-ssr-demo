@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import { BuilderContext, BuilderOutput, createBuilder } from '@angular-devkit/architect';
-import { runWebpack, webpackWatcher, webpackWatcherRef } from '@angular-devkit/build-webpack';
+import { runWebpack, webpackCompilerRef } from '@angular-devkit/build-webpack';
 import { json, normalize } from '@angular-devkit/core';
 import { NodeJsSyncHost } from '@angular-devkit/core/node';
 import * as path from 'path';
@@ -37,15 +37,18 @@ export type ServerBuilderOutput = json.JsonObject & BuilderOutput & {
 
 export { ServerBuilderOptions };
 
-function invalidate(): Observable<null> {
-  if (webpackWatcherRef.webpackWatcher) {
-    console.debug('invalidate');
-    webpackWatcherRef.webpackWatcher.invalidate();
-  }
-  else {
-    throw new Error('connot invalidate because webpackWatcher is null');
-  }
-  return of();
+function invalidate(): Observable<ServerBuilderOutput> {
+  return new Observable<ServerBuilderOutput>(sender => {
+    if (webpackCompilerRef.webpackCompiler) {
+      console.debug('invalidate');
+      webpackCompilerRef.webpackCompiler.run((a, b) => {  
+        sender.next({ success: true  });
+      });
+    }
+    else {
+      throw new Error('connot invalidate because webpackWatcher is null');
+    }
+  });
 }
 
 export function execute(
@@ -56,13 +59,23 @@ export function execute(
   } = {},
 ): Observable<ServerBuilderOutput> {
 
-  return buildWebpackBrowser(options as any, context).pipe(
-    tap(_ => console.debug('browser builder: done')),
+  const browserOptions = {...options, watch: false};
+
+  return _execute(options, context, transforms).pipe(
+    tap(_ => console.debug('server builder: done')),
     // Only start the server builder once; after further changes tell its
     // webpack instance which runs in watch mode to invalidate the build
-    mergeMap(_ => !webpackWatcherRef.webpackWatcher ? _execute(options, context) : invalidate()),
-    tap(_ => console.debug('server builder: done'))
-  );
+    mergeMap(_ => !webpackCompilerRef.webpackCompiler ? buildWebpackBrowser(browserOptions, context) : invalidate()),
+    tap(_ => console.debug('browser builder: done'))    
+  )
+
+  // return buildWebpackBrowser(options as any, context).pipe(
+  //   tap(_ => console.debug('browser builder: done')),
+  //   // Only start the server builder once; after further changes tell its
+  //   // webpack instance which runs in watch mode to invalidate the build
+  //   mergeMap(_ => !webpackWatcherRef.webpackWatcher ? _execute(options, context) : invalidate()),
+  //   tap(_ => console.debug('server builder: done'))
+  // );
 
   // return _execute(options, context, transforms);
 }
@@ -74,6 +87,8 @@ export function _execute(
     webpackConfiguration?: ExecutionTransformer<webpack.Configuration>;
   } = {},
 ): Observable<ServerBuilderOutput> {
+
+  
   const host = new NodeJsSyncHost();
   const root = context.workspaceRoot;
 
